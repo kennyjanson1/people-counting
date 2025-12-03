@@ -13,7 +13,9 @@ export class DetectionClient {
   private eventSource: EventSource | null = null
   private listeners: ((stats: DetectionStats) => void)[] = []
 
-  // Connect ke server-sent events stream
+  // ============================
+  // CONNECT TO SSE STREAM (PORT 5000)
+  // ============================
   connectStream(onUpdate: (stats: DetectionStats) => void): void {
     this.listeners.push(onUpdate)
 
@@ -21,7 +23,7 @@ export class DetectionClient {
       this.eventSource.close()
     }
 
-    this.eventSource = new EventSource("/api/stream")
+    this.eventSource = new EventSource("http://localhost:5000/api/stream")
 
     this.eventSource.onmessage = (event) => {
       try {
@@ -38,13 +40,15 @@ export class DetectionClient {
     }
   }
 
-  // Upload dan process video file
+  // ============================
+  // UPLOAD VIDEO → BACKEND 5000
+  // ============================
   async uploadVideo(file: File): Promise<DetectionStats> {
     const formData = new FormData()
     formData.append("video", file)
     formData.append("inputType", "upload")
 
-    const response = await fetch("/api/process-video", {
+    const response = await fetch("http://localhost:5000/api/process-video", {
       method: "POST",
       body: formData,
     })
@@ -56,9 +60,11 @@ export class DetectionClient {
     return await response.json()
   }
 
-  // Start webcam streaming
+  // ============================
+  // START WEBCAM STREAM → BACKEND 5000
+  // ============================
   async startWebcamStream(): Promise<void> {
-    const response = await fetch("/api/process-video", {
+    const response = await fetch("http://localhost:5000/api/process-video", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
