@@ -120,14 +120,8 @@ prev_time = time.time()
 # ========================
 # Helper Functions
 # ========================
-def get_detections_and_stats(frame):
-    global line_position, frame_width, counts, previous_x, crossed_recently, fps_counter, prev_time
-
-    if frame_width is None:
-        frame_width = frame.shape[1]
-        line_position = frame_width // 2
-
-    # Detection
+def detect_and_classify(frame):
+    """Core detection + gender classification (shared logic)"""
     det_results = detection_model(frame, conf=0.4, classes=0, verbose=False)  # class 0 = person
     
     centroids, genders = [], []
@@ -171,7 +165,57 @@ def get_detections_and_stats(frame):
                 "gender": "male" if gender == 1 else "female",
                 "label": "Male" if gender == 1 else "Female"
             })
+    
+    return centroids, genders, detections
 
+def update_tracking_and_counts():
+    """Update tracking, counts logic, and return objects"""
+    global previous_x, crossed_recently, counts
+    
+    objects, tracked_genders = ct.update(centroids, genders)
+    
+    for (object_id, centroid) in objects.items():
+        current_x = centroid[0]
+        gender = tracked_genders[object_id]
+        
+        # Count logic
+        if object_id in previous_x:
+            prev_x = previous_x[object_id]
+            now = time.time()
+            if now - crossed_recently.get(object_id, 0) > 1.5:
+                gender_label = "male" if gender == 1 else "female"
+                
+                if prev_x > line_position and current_x < line_position:
+                    counts[f"{gender_label}_out"] += 1
+                    crossed_recently[object_id] = now
+                elif prev_x < line_position and current_x > line_position:
+                    counts[f"{gender_label}_in"] += 1
+                    crossed_recently[object_id] = now
+        
+        previous_x[object_id] = current_x
+    
+    # Clean previous_x
+    for oid in list(previous_x.keys()):
+        if oid not in objects:
+            previous_x.pop(oid, None)
+            crossed_recently.pop(oid, None)
+    
+    # Update current count
+    counts["current_count"] = len(objects)
+    
+    return objects, tracked_genders
+
+def get_detections_and_stats(frame):
+    """Get detections and stats for API response"""
+    global line_position, frame_width, prev_time
+    
+    if frame_width is None:
+        frame_width = frame.shape[1]
+        line_position = frame_width // 2
+
+    # Get detections
+    centroids, genders, detections = detect_and_classify(frame)
+    
     # Tracking
     objects, tracked_genders = ct.update(centroids, genders)
     
@@ -186,6 +230,7 @@ def get_detections_and_stats(frame):
                 updated_detections.append(det)
                 break
     
+    # Update tracking and counts
     for (object_id, centroid) in objects.items():
         current_x = centroid[0]
         gender = tracked_genders[object_id]
@@ -223,52 +268,29 @@ def get_detections_and_stats(frame):
     return updated_detections, counts.copy(), fps
 
 def process_frame(frame):
-    global line_position, frame_width, counts, previous_x, crossed_recently, fps_counter, prev_time
+    """Process frame for video output (with visualization)"""
+    global line_position, frame_width, counts, previous_x, crossed_recently, prev_time
 
     if frame_width is None:
         frame_width = frame.shape[1]
         line_position = frame_width // 2
 
-    # Detection
-    det_results = detection_model(frame, conf=0.4, classes=0, verbose=False)  # class 0 = person
-    
-    centroids, genders = [], []
-    
-    for result in det_results:
-        boxes = result.boxes.xyxy.cpu().numpy()
-        confs = result.boxes.conf.cpu().numpy()
-        
-        for box, conf in zip(boxes, confs):
-            if conf < 0.4:
-                continue
-            
-            x1, y1, x2, y2 = map(int, box)
-            cx, cy = int((x1 + x2) / 2), int((y1 + y2) / 2)
-            
-            # Crop person region
-            person_crop = frame[max(0, y1):min(frame.shape[0], y2), max(0, x1):min(frame.shape[1], x2)]
-            
-            if person_crop.size > 0:
-                # Gender classification
-                gender_results = gender_model(person_crop, verbose=False)
-                gender = 0
-                if gender_results and len(gender_results) > 0:
-                    boxes_gender = gender_results[0].boxes
-                    if len(boxes_gender) > 0:
-                        gender = int(boxes_gender[0].cls[0])
-                
-                centroids.append((cx, cy))
-                genders.append(gender)
-                
-                # Draw box
-                color = (0, 0, 255) if gender == 1 else (255, 0, 0)  # Blue=Male, Red=Female
-                label = "Male" if gender == 1 else "Female"
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+    # Get detections
+    centroids, genders, detections = detect_and_classify(frame)
 
     # Tracking
     objects, tracked_genders = ct.update(centroids, genders)
     
+    # Draw detections
+    for det in detections:
+        x1, y1 = det["x"], det["y"]
+        x2, y2 = x1 + det["width"], y1 + det["height"]
+        color = (0, 0, 255) if det["gender"] == "male" else (255, 0, 0)  # Blue=Male, Red=Female
+        
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(frame, det["label"], (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+    
+    # Update tracking and counts
     for (object_id, centroid) in objects.items():
         current_x = centroid[0]
         gender = tracked_genders[object_id]
@@ -314,7 +336,7 @@ def process_frame(frame):
     
     # FPS
     curr_time = time.time()
-    fps = 1 / (curr_time - prev_time)
+    fps = 1 / (curr_time - prev_time) if curr_time - prev_time > 0 else 0
     prev_time = curr_time
     cv2.putText(frame, f"FPS: {fps:.2f}", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
     

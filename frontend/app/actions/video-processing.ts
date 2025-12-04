@@ -43,21 +43,6 @@ export async function processVideoFile(formData: FormData): Promise<ProcessingRe
 }
 
 /**
- * Start webcam streaming ke backend
- */
-export async function startWebcamStream(): Promise<{ success: boolean; error?: string }> {
-  try {
-    return { success: true }
-  } catch (error) {
-    console.error("[v0] Webcam start error:", error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error occurred",
-    }
-  }
-}
-
-/**
  * Validate backend connection
  */
 export async function validateBackendConnection(): Promise<boolean> {
