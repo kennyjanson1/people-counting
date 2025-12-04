@@ -63,22 +63,39 @@ export default function LiveAnalytics({ inputType, onBack }: LiveAnalyticsProps)
             videoRef.current.srcObject = stream
             setIsProcessing(true)
 
-            const result = await startWebcamStream()
-            if (!result.success) {
-              setError("Failed to start backend webcam processing")
-              return
-            }
+            // Connect to WebSocket for real-time processing
+            detectionClient.connectWebSocket(
+              (detections) => {
+                setDetections(detections)
+              },
+              (detectionStats) => {
+                setStats({
+                  maleIn: detectionStats.maleIn,
+                  maleOut: detectionStats.maleOut,
+                  femaleIn: detectionStats.femaleIn,
+                  femaleOut: detectionStats.femaleOut,
+                  currentCount: detectionStats.currentCount,
+                })
+                setFps(detectionStats.fps)
+              }
+            )
 
-            detectionClient.connectStream((detectionStats) => {
-              setStats({
-                maleIn: detectionStats.maleIn,
-                maleOut: detectionStats.maleOut,
-                femaleIn: detectionStats.femaleIn,
-                femaleOut: detectionStats.femaleOut,
-                currentCount: detectionStats.currentCount,
-              })
-              setFps(detectionStats.fps)
-            })
+            // Start sending frames to backend
+            const canvas = document.createElement('canvas')
+            const ctx = canvas.getContext('2d')
+            const sendFrame = () => {
+              if (videoRef.current && ctx && detectionClient) {
+                canvas.width = videoRef.current.videoWidth
+                canvas.height = videoRef.current.videoHeight
+                ctx.drawImage(videoRef.current, 0, 0)
+                const frameData = canvas.toDataURL('image/jpeg', 0.8)
+                detectionClient.sendFrame(frameData)
+                requestAnimationFrame(sendFrame)
+              }
+            }
+            videoRef.current.onloadedmetadata = () => {
+              sendFrame()
+            }
           }
         } else {
           fileInputRef.current?.click()

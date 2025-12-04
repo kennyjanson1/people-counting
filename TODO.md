@@ -1,0 +1,4 @@
+- [x] Add WebSocket endpoint to backend/app.py for real-time frame processing
+- [x] Modify frontend/lib/detection-client.ts to use WebSocket for webcam instead of SSE
+- [x] Update frontend/components/live-analytics.tsx to receive and display detections from WebSocket
+- [ ] Test the connection by running backend and frontend
