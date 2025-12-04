@@ -17,13 +17,9 @@ export interface DetectionFrame {
   femaleCount: number
   totalCount: number
 }
-
 export interface Statistics {
-  maleIn: number
-  maleOut: number
-  femaleIn: number
-  femaleOut: number
-  currentCount: number
+  maleCount: number
+  femaleCount: number
+  totalCount: number
   fps: number
-  framesProcessed: number
 }

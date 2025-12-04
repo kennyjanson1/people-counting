@@ -22,15 +22,19 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json()
 
+    // Normalize backend counts to per-frame stats
+    const counts = data.counts || {}
+    const maleCount = counts.maleCount ?? counts.male_count ?? counts.male_in ?? 0
+    const femaleCount = counts.femaleCount ?? counts.female_count ?? counts.female_in ?? 0
+    const totalCount = counts.totalCount ?? counts.total_count ?? counts.current_count ?? (maleCount + femaleCount)
+
     return NextResponse.json({
       success: true,
       stats: {
-        maleIn: data.counts.male_in,
-        maleOut: data.counts.male_out,
-        femaleIn: data.counts.female_in,
-        femaleOut: data.counts.female_out,
-        currentCount: data.counts.current_count,
-        fps: 30, // default FPS
+        maleCount,
+        femaleCount,
+        totalCount,
+        fps: counts.fps ?? 30,
       },
     })
   } catch (error) {

@@ -18,11 +18,9 @@ interface LiveAnalyticsProps {
 }
 
 interface Stats {
-  maleIn: number
-  maleOut: number
-  femaleIn: number
-  femaleOut: number
-  currentCount: number
+  maleCount: number
+  femaleCount: number
+  totalCount: number
 }
 
 interface Detection {
@@ -40,11 +38,9 @@ export default function LiveAnalytics({ inputType, onBack }: LiveAnalyticsProps)
   const videoRef = useRef<HTMLVideoElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [stats, setStats] = useState<Stats>({
-    maleIn: 0,
-    maleOut: 0,
-    femaleIn: 0,
-    femaleOut: 0,
-    currentCount: 0,
+    maleCount: 0,
+    femaleCount: 0,
+    totalCount: 0,
   })
   const [detections, setDetections] = useState<Detection[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
@@ -63,38 +59,66 @@ export default function LiveAnalytics({ inputType, onBack }: LiveAnalyticsProps)
             videoRef.current.srcObject = stream
             setIsProcessing(true)
 
-            // Connect to WebSocket for real-time processing
+            // Connect to WebSocket for real-time processing (only once)
             detectionClient.connectWebSocket(
               (detections) => {
                 setDetections(detections)
               },
               (detectionStats) => {
                 setStats({
-                  maleIn: detectionStats.maleIn,
-                  maleOut: detectionStats.maleOut,
-                  femaleIn: detectionStats.femaleIn,
-                  femaleOut: detectionStats.femaleOut,
-                  currentCount: detectionStats.currentCount,
+                  maleCount: detectionStats.maleCount ?? 0,
+                  femaleCount: detectionStats.femaleCount ?? 0,
+                  totalCount: detectionStats.totalCount ?? 0,
                 })
-                setFps(detectionStats.fps)
+                setFps(detectionStats.fps ?? 0)
               }
             )
 
             // Start sending frames to backend
             const canvas = document.createElement('canvas')
             const ctx = canvas.getContext('2d')
+            let lastFrameTime = 0
+            // Configurable target FPS (increase to 30 to try for higher framerate)
+            const targetFps = 20
+            const frameInterval = 1000 / targetFps
+            // Max width to send to backend to reduce payload (maintains aspect ratio)
+            const maxSendWidth = 640
+            let animationFrameId: number | null = null
+            
             const sendFrame = () => {
-              if (videoRef.current && ctx && detectionClient) {
-                canvas.width = videoRef.current.videoWidth
-                canvas.height = videoRef.current.videoHeight
-                ctx.drawImage(videoRef.current, 0, 0)
-                const frameData = canvas.toDataURL('image/jpeg', 0.8)
-                detectionClient.sendFrame(frameData)
-                requestAnimationFrame(sendFrame)
+              const now = Date.now()
+              if (videoRef.current && ctx && detectionClient && now - lastFrameTime >= frameInterval) {
+                // Downscale before sending to reduce bandwidth and encode time
+                const vw = videoRef.current.videoWidth
+                const vh = videoRef.current.videoHeight
+                const scale = Math.min(1, maxSendWidth / vw)
+                const sendW = Math.max(160, Math.floor(vw * scale))
+                const sendH = Math.max(120, Math.floor(vh * scale))
+
+                canvas.width = sendW
+                canvas.height = sendH
+
+                if (canvas.width > 0 && canvas.height > 0) {
+                  ctx.drawImage(videoRef.current, 0, 0, sendW, sendH)
+                  // Lower JPEG quality to speed up encoding/transmission
+                  const frameData = canvas.toDataURL('image/jpeg', 0.6)
+                  detectionClient.sendFrame(frameData)
+                  lastFrameTime = now
+                }
               }
+              animationFrameId = requestAnimationFrame(sendFrame)
             }
+            
             videoRef.current.onloadedmetadata = () => {
+              console.log("Video metadata loaded, starting frame capture")
               sendFrame()
+            }
+            
+            // Store cleanup function
+            return () => {
+              if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId)
+              }
             }
           }
         } else {
@@ -105,9 +129,10 @@ export default function LiveAnalytics({ inputType, onBack }: LiveAnalyticsProps)
       }
     }
 
-    initializeInput()
+    const cleanup = initializeInput()
 
     return () => {
+      cleanup?.then((fn) => fn?.())
       detectionClient.disconnect()
       if (videoRef.current?.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream
@@ -131,11 +156,9 @@ export default function LiveAnalytics({ inputType, onBack }: LiveAnalyticsProps)
 
         if (result.success && result.stats) {
           setStats({
-            maleIn: result.stats.maleIn,
-            maleOut: result.stats.maleOut,
-            femaleIn: result.stats.femaleIn,
-            femaleOut: result.stats.femaleOut,
-            currentCount: result.stats.currentCount,
+            maleCount: result.stats.maleCount,
+            femaleCount: result.stats.femaleCount,
+            totalCount: result.stats.totalCount,
           })
           setFps(result.stats.fps)
         } else {

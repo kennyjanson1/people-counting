@@ -3,11 +3,9 @@
 interface ProcessingResult {
   success: boolean
   stats?: {
-    maleIn: number
-    maleOut: number
-    femaleIn: number
-    femaleOut: number
-    currentCount: number
+    maleCount: number
+    femaleCount: number
+    totalCount: number
     fps: number
   }
   error?: string

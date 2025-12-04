@@ -90,13 +90,13 @@ app.add_middleware(
 )
 
 # ========================
-# Load YOLO Models
+# Load YOLO Model (Single Model)
 # ========================
 try:
-    detection_model = YOLO("yolov8n.pt")  # Person detection
-    gender_model = YOLO("gender-cls.pt")  # Gender classification
+    gender_model = YOLO("gender-cls.pt")  # Gender detection & classification
+    print("✓ Model gender-cls.pt loaded successfully")
 except Exception as e:
-    print(f"Error loading models: {e}")
+    print(f"Error loading model: {e}")
     print("Make sure gender-cls.pt is in the backend folder")
 
 # ========================
@@ -121,39 +121,46 @@ prev_time = time.time()
 # Helper Functions
 # ========================
 def detect_and_classify(frame):
-    """Core detection + gender classification (shared logic)"""
-    det_results = detection_model(frame, conf=0.4, classes=0, verbose=False)  # class 0 = person
+    """Detect and classify gender using single model"""
+    # Gunakan model gender langsung untuk deteksi dengan imgsz yang lebih besar
+    results = gender_model(frame, conf=0.35, verbose=False, imgsz=640)
     
     centroids, genders = [], []
     detections = []
     
-    for result in det_results:
+    for result in results:
         boxes = result.boxes.xyxy.cpu().numpy()
         confs = result.boxes.conf.cpu().numpy()
+        classes = result.boxes.cls.cpu().numpy()
         
-        for box, conf in zip(boxes, confs):
-            if conf < 0.4:
+        for box, conf, cls in zip(boxes, confs, classes):
+            if conf < 0.3:
                 continue
             
             x1, y1, x2, y2 = map(int, box)
-            cx, cy = int((x1 + x2) / 2), int((y1 + y2) / 2)
+            
+            # Perbesar bounding box 20%
             width = x2 - x1
             height = y2 - y1
+            expand_w = int(width * 0.2)
+            expand_h = int(height * 0.2)
             
-            # Crop person region
-            person_crop = frame[max(0, y1):min(frame.shape[0], y2), max(0, x1):min(frame.shape[1], x2)]
+            x1 = max(0, x1 - expand_w)
+            y1 = max(0, y1 - expand_h)
+            x2 = min(frame.shape[1], x2 + expand_w)
+            y2 = min(frame.shape[0], y2 + expand_h)
             
-            gender = 0
-            if person_crop.size > 0:
-                # Gender classification
-                gender_results = gender_model(person_crop, verbose=False)
-                if gender_results and len(gender_results) > 0:
-                    boxes_gender = gender_results[0].boxes
-                    if len(boxes_gender) > 0:
-                        gender = int(boxes_gender[0].cls[0])
+            gender = int(cls)  # 0=female, 1=male (sesuaikan dengan training Anda)
             
+            # Calculate centroid
+            cx = int((x1 + x2) / 2)
+            cy = int((y1 + y2) / 2)
+
             centroids.append((cx, cy))
             genders.append(gender)
+
+            width = x2 - x1
+            height = y2 - y1
             
             detections.append({
                 "id": len(detections),  # temporary id, will be replaced by tracker id
@@ -168,41 +175,41 @@ def detect_and_classify(frame):
     
     return centroids, genders, detections
 
-def update_tracking_and_counts():
+def update_tracking_and_counts(centroids, genders):
     """Update tracking, counts logic, and return objects"""
     global previous_x, crossed_recently, counts
-    
+
     objects, tracked_genders = ct.update(centroids, genders)
-    
+
     for (object_id, centroid) in objects.items():
         current_x = centroid[0]
         gender = tracked_genders[object_id]
-        
+
         # Count logic
         if object_id in previous_x:
             prev_x = previous_x[object_id]
             now = time.time()
             if now - crossed_recently.get(object_id, 0) > 1.5:
                 gender_label = "male" if gender == 1 else "female"
-                
+
                 if prev_x > line_position and current_x < line_position:
                     counts[f"{gender_label}_out"] += 1
                     crossed_recently[object_id] = now
                 elif prev_x < line_position and current_x > line_position:
                     counts[f"{gender_label}_in"] += 1
                     crossed_recently[object_id] = now
-        
+
         previous_x[object_id] = current_x
-    
+
     # Clean previous_x
     for oid in list(previous_x.keys()):
         if oid not in objects:
             previous_x.pop(oid, None)
             crossed_recently.pop(oid, None)
-    
+
     # Update current count
     counts["current_count"] = len(objects)
-    
+
     return objects, tracked_genders
 
 def get_detections_and_stats(frame):
@@ -225,7 +232,9 @@ def get_detections_and_stats(frame):
         gender = tracked_genders[object_id]
         # Find corresponding detection
         for det in detections:
-            if (det["x"] + det["width"]/2, det["y"] + det["height"]/2) == centroid:
+            det_cx = det["x"] + det["width"]/2
+            det_cy = det["y"] + det["height"]/2
+            if abs(det_cx - centroid[0]) < 50 and abs(det_cy - centroid[1]) < 50:
                 det["id"] = object_id
                 updated_detections.append(det)
                 break
@@ -257,8 +266,15 @@ def get_detections_and_stats(frame):
             previous_x.pop(oid, None)
             crossed_recently.pop(oid, None)
     
-    # Update current count
+    # Update current count dan hitung male/female saat ini
     counts["current_count"] = len(objects)
+    
+    # Hitung jumlah male dan female di frame saat ini
+    male_count = sum(1 for g in tracked_genders.values() if g == 1)
+    female_count = sum(1 for g in tracked_genders.values() if g == 0)
+    
+    counts["current_male"] = male_count
+    counts["current_female"] = female_count
     
     # FPS
     curr_time = time.time()
@@ -326,7 +342,7 @@ def process_frame(frame):
     counts["current_count"] = len(objects)
     
     # Draw line
-    cv2.line(frame, (line_position, 0), (line_position, frame.shape[0]), (0, 0, 255), 2)
+    cv2.line(frame, (line_position, 0), (line_position, frame.shape[0]), (0, 255, 0), 2)
     
     # Draw stats
     cv2.putText(frame, f"Male In: {counts['male_in']}  Out: {counts['male_out']}",

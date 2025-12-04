@@ -12,12 +12,15 @@ export async function GET() {
 
     const data = await response.json()
 
+    const maleCount = data.maleCount ?? data.male_count ?? data.male_in ?? 0
+    const femaleCount = data.femaleCount ?? data.female_count ?? data.female_in ?? 0
+    const totalCount = data.totalCount ?? data.total_count ?? data.current_count ?? (maleCount + femaleCount)
+
     return NextResponse.json({
-      maleIn: data.male_in,
-      maleOut: data.male_out,
-      femaleIn: data.female_in,
-      femaleOut: data.female_out,
-      currentCount: data.current_count,
+      maleCount,
+      femaleCount,
+      totalCount,
+      fps: data.fps ?? 0,
     })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })

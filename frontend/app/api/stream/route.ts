@@ -27,13 +27,15 @@ export async function GET(req: NextRequest) {
             if (line.startsWith("data: ")) {
               try {
                 const data = JSON.parse(line.substring(6))
+                // Normalize incoming stream data to new per-frame keys
+                const maleCount = data.maleCount ?? data.male_count ?? data.male_in ?? 0
+                const femaleCount = data.femaleCount ?? data.female_count ?? data.female_in ?? 0
+                const totalCount = data.totalCount ?? data.total_count ?? data.current_count ?? (maleCount + femaleCount)
                 const transformed = `data: ${JSON.stringify({
-                  maleIn: data.male_in,
-                  maleOut: data.male_out,
-                  femaleIn: data.female_in,
-                  femaleOut: data.female_out,
-                  currentCount: data.current_count,
-                  fps: data.fps || 0,
+                  maleCount,
+                  femaleCount,
+                  totalCount,
+                  fps: data.fps ?? 0,
                   timestamp: Date.now(),
                 })}\n\n`
                 controller.enqueue(encoder.encode(transformed))
