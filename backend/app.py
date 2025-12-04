@@ -3,11 +3,12 @@ import numpy as np
 from collections import OrderedDict
 from ultralytics import YOLO
 import time
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, WebSocket
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import json
+import base64
 
 # ========================
 # Centroid Tracker
@@ -119,6 +120,108 @@ prev_time = time.time()
 # ========================
 # Helper Functions
 # ========================
+def get_detections_and_stats(frame):
+    global line_position, frame_width, counts, previous_x, crossed_recently, fps_counter, prev_time
+
+    if frame_width is None:
+        frame_width = frame.shape[1]
+        line_position = frame_width // 2
+
+    # Detection
+    det_results = detection_model(frame, conf=0.4, classes=0, verbose=False)  # class 0 = person
+    
+    centroids, genders = [], []
+    detections = []
+    
+    for result in det_results:
+        boxes = result.boxes.xyxy.cpu().numpy()
+        confs = result.boxes.conf.cpu().numpy()
+        
+        for box, conf in zip(boxes, confs):
+            if conf < 0.4:
+                continue
+            
+            x1, y1, x2, y2 = map(int, box)
+            cx, cy = int((x1 + x2) / 2), int((y1 + y2) / 2)
+            width = x2 - x1
+            height = y2 - y1
+            
+            # Crop person region
+            person_crop = frame[max(0, y1):min(frame.shape[0], y2), max(0, x1):min(frame.shape[1], x2)]
+            
+            gender = 0
+            if person_crop.size > 0:
+                # Gender classification
+                gender_results = gender_model(person_crop, verbose=False)
+                if gender_results and len(gender_results) > 0:
+                    boxes_gender = gender_results[0].boxes
+                    if len(boxes_gender) > 0:
+                        gender = int(boxes_gender[0].cls[0])
+            
+            centroids.append((cx, cy))
+            genders.append(gender)
+            
+            detections.append({
+                "id": len(detections),  # temporary id, will be replaced by tracker id
+                "x": x1,
+                "y": y1,
+                "width": width,
+                "height": height,
+                "confidence": float(conf),
+                "gender": "male" if gender == 1 else "female",
+                "label": "Male" if gender == 1 else "Female"
+            })
+
+    # Tracking
+    objects, tracked_genders = ct.update(centroids, genders)
+    
+    # Update detections with tracked ids
+    updated_detections = []
+    for (object_id, centroid) in objects.items():
+        gender = tracked_genders[object_id]
+        # Find corresponding detection
+        for det in detections:
+            if (det["x"] + det["width"]/2, det["y"] + det["height"]/2) == centroid:
+                det["id"] = object_id
+                updated_detections.append(det)
+                break
+    
+    for (object_id, centroid) in objects.items():
+        current_x = centroid[0]
+        gender = tracked_genders[object_id]
+        
+        # Count logic
+        if object_id in previous_x:
+            prev_x = previous_x[object_id]
+            now = time.time()
+            if now - crossed_recently.get(object_id, 0) > 1.5:
+                gender_label = "male" if gender == 1 else "female"
+                
+                if prev_x > line_position and current_x < line_position:
+                    counts[f"{gender_label}_out"] += 1
+                    crossed_recently[object_id] = now
+                elif prev_x < line_position and current_x > line_position:
+                    counts[f"{gender_label}_in"] += 1
+                    crossed_recently[object_id] = now
+        
+        previous_x[object_id] = current_x
+    
+    # Clean previous_x
+    for oid in list(previous_x.keys()):
+        if oid not in objects:
+            previous_x.pop(oid, None)
+            crossed_recently.pop(oid, None)
+    
+    # Update current count
+    counts["current_count"] = len(objects)
+    
+    # FPS
+    curr_time = time.time()
+    fps = 1 / (curr_time - prev_time) if prev_time else 0
+    prev_time = curr_time
+    
+    return updated_detections, counts.copy(), fps
+
 def process_frame(frame):
     global line_position, frame_width, counts, previous_x, crossed_recently, fps_counter, prev_time
 
@@ -273,6 +376,32 @@ async def stream_stats():
 async def health():
     """Health check"""
     return JSONResponse({"status": "ok", "models_loaded": True})
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data.startswith("data:image/jpeg;base64,"):
+                # Decode base64 image
+                image_data = base64.b64decode(data.split(",")[1])
+                nparr = np.frombuffer(image_data, np.uint8)
+                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+                # Process frame
+                detections, stats, fps = get_detections_and_stats(frame)
+
+                # Send back detections and stats
+                await websocket.send_json({
+                    "detections": detections,
+                    "stats": stats,
+                    "fps": fps
+                })
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+    finally:
+        await websocket.close()
 
 if __name__ == "__main__":
     import uvicorn
