@@ -3,17 +3,24 @@
 import { useState } from "react"
 import VideoInputSelector from "@/components/video-input-selector"
 import LiveAnalytics from "@/components/live-analytics"
+import PhotoUpload from "@/components/photo-upload"
 
 export default function Home() {
-  const [selectedInput, setSelectedInput] = useState<"webcam" | "upload" | null>(null)
+  const [selectedMode, setSelectedMode] = useState<"webcam" | "upload" | "photo" | null>(null)
+
+  const handleBack = () => {
+    setSelectedMode(null)
+  }
+
+  if (!selectedMode) {
+    return <VideoInputSelector onSelect={setSelectedMode} />
+  }
 
   return (
-    <main className="min-h-screen bg-background">
-      {!selectedInput ? (
-        <VideoInputSelector onSelect={setSelectedInput} />
-      ) : (
-        <LiveAnalytics inputType={selectedInput} onBack={() => setSelectedInput(null)} />
-      )}
-    </main>
+    <div>
+      {selectedMode === "photo" && <PhotoUpload />}
+      {selectedMode === "webcam" && <LiveAnalytics inputType="webcam" onBack={handleBack} />}
+      {selectedMode === "upload" && <LiveAnalytics inputType="upload" onBack={handleBack} />}
+    </div>
   )
 }
