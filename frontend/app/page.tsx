@@ -3,24 +3,27 @@
 import { useState } from "react"
 import VideoInputSelector from "@/components/video-input-selector"
 import LiveAnalytics from "@/components/live-analytics"
-import PhotoUpload from "@/components/photo-upload"
+import ImageUpload from "@/components/image-upload"
+
+type ViewMode = "selector" | "webcam" | "upload" | "photo"
 
 export default function Home() {
-  const [selectedMode, setSelectedMode] = useState<"webcam" | "upload" | "photo" | null>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>("selector")
 
-  const handleBack = () => {
-    setSelectedMode(null)
+  const handleSelect = (type: "webcam" | "upload" | "photo") => {
+    setViewMode(type)
   }
 
-  if (!selectedMode) {
-    return <VideoInputSelector onSelect={setSelectedMode} />
+  const handleBack = () => {
+    setViewMode("selector")
   }
 
   return (
-    <div>
-      {selectedMode === "photo" && <PhotoUpload />}
-      {selectedMode === "webcam" && <LiveAnalytics inputType="webcam" onBack={handleBack} />}
-      {selectedMode === "upload" && <LiveAnalytics inputType="upload" onBack={handleBack} />}
-    </div>
+    <>
+      {viewMode === "selector" && <VideoInputSelector onSelect={handleSelect} />}
+      {viewMode === "webcam" && <LiveAnalytics inputType="webcam" onBack={handleBack} />}
+      {viewMode === "upload" && <LiveAnalytics inputType="upload" onBack={handleBack} />}
+      {viewMode === "photo" && <ImageUpload onBack={handleBack} />}
+    </>
   )
 }

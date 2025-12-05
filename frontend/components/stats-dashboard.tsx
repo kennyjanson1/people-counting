@@ -61,7 +61,7 @@ export function StatsDashboard({ stats, fps }: StatsDashboardProps) {
           </Card>
         </div>
 
-        {/* Gender Distribution */}
+        {/* Gender Distribution
         <Card className="bg-muted/30">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Gender Distribution</CardTitle>
@@ -108,7 +108,7 @@ export function StatsDashboard({ stats, fps }: StatsDashboardProps) {
               </p>
             )}
           </CardContent>
-        </Card>
+        </Card> */}
 
         {/* FPS Card */}
         {fps !== undefined && (

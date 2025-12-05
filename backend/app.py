@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import json
 import base64
+import os
 
 # ========================
 # Centroid Tracker
@@ -18,7 +19,7 @@ class CentroidTracker:
         self.next_object_id = 0
         self.objects = OrderedDict()
         self.disappeared = OrderedDict()
-        self.genders = {}  # Track gender for each object
+        self.genders = {}
         self.max_disappeared = max_disappeared
 
     def register(self, centroid, gender):
@@ -80,7 +81,6 @@ class CentroidTracker:
 # ========================
 app = FastAPI()
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -90,17 +90,26 @@ app.add_middleware(
 )
 
 # ========================
-# Load YOLO Model (Single Model)
+# Load YOLO Models
 # ========================
 try:
-    gender_model = YOLO("gender-cls.pt")  # Gender detection & classification
-    print("✓ Model gender-cls.pt loaded successfully")
+    # Model untuk Live Analytics (realtime tracking) - LANGSUNG DETEKSI + KLASIFIKASI
+    gender_model = YOLO("gender-cls.pt")
+    print("✓ Model gender-cls.pt loaded successfully (for Live Analytics)")
 except Exception as e:
-    print(f"Error loading model: {e}")
-    print("Make sure gender-cls.pt is in the backend folder")
+    print(f"⚠ Error loading gender-cls.pt: {e}")
+    gender_model = None
+
+try:
+    # Model untuk Image Upload (face detection only)
+    face_model = YOLO("face-model.pt")
+    print("✓ Model face-model.pt loaded successfully (for Image Upload)")
+except Exception as e:
+    print(f"⚠ Error loading face-model.pt: {e}")
+    face_model = None
 
 # ========================
-# Global Variables
+# Global Variables (for Live Analytics)
 # ========================
 counts = {
     "male_in": 0,
@@ -108,21 +117,25 @@ counts = {
     "female_in": 0,
     "female_out": 0,
     "current_count": 0,
+    "current_male": 0,
+    "current_female": 0,
 }
 ct = CentroidTracker()
 previous_x = {}
 crossed_recently = {}
 line_position = None
 frame_width = None
-fps_counter = 0
 prev_time = time.time()
 
 # ========================
-# Helper Functions
+# Helper Functions for Live Analytics (PAKAI GENDER-CLS.PT SAJA)
 # ========================
-def detect_and_classify(frame):
-    """Detect and classify gender using single model"""
-    # Gunakan model gender langsung untuk deteksi dengan imgsz yang lebih besar
+def detect_and_classify_live(frame):
+    """Detect and classify gender for live analytics using gender-cls.pt only"""
+    if gender_model is None:
+        return [], [], []
+    
+    # Langsung pakai gender-cls.pt (deteksi + klasifikasi sekaligus)
     results = gender_model(frame, conf=0.35, verbose=False, imgsz=640)
     
     centroids, genders = [], []
@@ -139,7 +152,7 @@ def detect_and_classify(frame):
             
             x1, y1, x2, y2 = map(int, box)
             
-            # Perbesar bounding box 20%
+            # Expand bounding box 20%
             width = x2 - x1
             height = y2 - y1
             expand_w = int(width * 0.2)
@@ -150,9 +163,8 @@ def detect_and_classify(frame):
             x2 = min(frame.shape[1], x2 + expand_w)
             y2 = min(frame.shape[0], y2 + expand_h)
             
-            gender = int(cls)  # 0=female, 1=male (sesuaikan dengan training Anda)
+            gender = int(cls)  # 0=female, 1=male
             
-            # Calculate centroid
             cx = int((x1 + x2) / 2)
             cy = int((y1 + y2) / 2)
 
@@ -163,7 +175,7 @@ def detect_and_classify(frame):
             height = y2 - y1
             
             detections.append({
-                "id": len(detections),  # temporary id, will be replaced by tracker id
+                "id": len(detections),
                 "x": x1,
                 "y": y1,
                 "width": width,
@@ -175,62 +187,20 @@ def detect_and_classify(frame):
     
     return centroids, genders, detections
 
-def update_tracking_and_counts(centroids, genders):
-    """Update tracking, counts logic, and return objects"""
-    global previous_x, crossed_recently, counts
-
-    objects, tracked_genders = ct.update(centroids, genders)
-
-    for (object_id, centroid) in objects.items():
-        current_x = centroid[0]
-        gender = tracked_genders[object_id]
-
-        # Count logic
-        if object_id in previous_x:
-            prev_x = previous_x[object_id]
-            now = time.time()
-            if now - crossed_recently.get(object_id, 0) > 1.5:
-                gender_label = "male" if gender == 1 else "female"
-
-                if prev_x > line_position and current_x < line_position:
-                    counts[f"{gender_label}_out"] += 1
-                    crossed_recently[object_id] = now
-                elif prev_x < line_position and current_x > line_position:
-                    counts[f"{gender_label}_in"] += 1
-                    crossed_recently[object_id] = now
-
-        previous_x[object_id] = current_x
-
-    # Clean previous_x
-    for oid in list(previous_x.keys()):
-        if oid not in objects:
-            previous_x.pop(oid, None)
-            crossed_recently.pop(oid, None)
-
-    # Update current count
-    counts["current_count"] = len(objects)
-
-    return objects, tracked_genders
-
 def get_detections_and_stats(frame):
-    """Get detections and stats for API response"""
+    """Get detections and stats for live analytics"""
     global line_position, frame_width, prev_time
     
     if frame_width is None:
         frame_width = frame.shape[1]
         line_position = frame_width // 2
 
-    # Get detections
-    centroids, genders, detections = detect_and_classify(frame)
-    
-    # Tracking
+    centroids, genders, detections = detect_and_classify_live(frame)
     objects, tracked_genders = ct.update(centroids, genders)
     
-    # Update detections with tracked ids
     updated_detections = []
     for (object_id, centroid) in objects.items():
         gender = tracked_genders[object_id]
-        # Find corresponding detection
         for det in detections:
             det_cx = det["x"] + det["width"]/2
             det_cy = det["y"] + det["height"]/2
@@ -239,12 +209,10 @@ def get_detections_and_stats(frame):
                 updated_detections.append(det)
                 break
     
-    # Update tracking and counts
     for (object_id, centroid) in objects.items():
         current_x = centroid[0]
         gender = tracked_genders[object_id]
         
-        # Count logic
         if object_id in previous_x:
             prev_x = previous_x[object_id]
             now = time.time()
@@ -260,182 +228,191 @@ def get_detections_and_stats(frame):
         
         previous_x[object_id] = current_x
     
-    # Clean previous_x
     for oid in list(previous_x.keys()):
         if oid not in objects:
             previous_x.pop(oid, None)
             crossed_recently.pop(oid, None)
     
-    # Update current count dan hitung male/female saat ini
     counts["current_count"] = len(objects)
-    
-    # Hitung jumlah male dan female di frame saat ini
     male_count = sum(1 for g in tracked_genders.values() if g == 1)
     female_count = sum(1 for g in tracked_genders.values() if g == 0)
-    
     counts["current_male"] = male_count
     counts["current_female"] = female_count
     
-    # FPS
     curr_time = time.time()
     fps = 1 / (curr_time - prev_time) if prev_time else 0
     prev_time = curr_time
     
     return updated_detections, counts.copy(), fps
 
-def process_frame(frame):
-    """Process frame for video output (with visualization)"""
-    global line_position, frame_width, counts, previous_x, crossed_recently, prev_time
-
-    if frame_width is None:
-        frame_width = frame.shape[1]
-        line_position = frame_width // 2
-
-    # Get detections
-    centroids, genders, detections = detect_and_classify(frame)
-
-    # Tracking
-    objects, tracked_genders = ct.update(centroids, genders)
+# ========================
+# Helper Functions for Image Upload (2-STEP: FACE DETECTION + GENDER CLASSIFICATION)
+# ========================
+def analyze_image(frame):
+    """Analyze uploaded image using 2-step: face-model.pt + gender-cls.pt"""
+    if face_model is None or gender_model is None:
+        return {
+            "status": "error",
+            "message": "Models not loaded",
+            "total_people": 0,
+            "male_count": 0,
+            "female_count": 0,
+            "detections": []
+        }
     
-    # Draw detections
-    for det in detections:
-        x1, y1 = det["x"], det["y"]
-        x2, y2 = x1 + det["width"], y1 + det["height"]
-        color = (0, 0, 255) if det["gender"] == "male" else (255, 0, 0)  # Blue=Male, Red=Female
+    h, w = frame.shape[:2]
+    
+    # Step 1: Detect faces using face-model.pt
+    face_results = face_model(frame, conf=0.3, verbose=False, imgsz=640)
+    
+    male_count = 0
+    female_count = 0
+    detections = []
+    
+    for result in face_results:
+        boxes = result.boxes.xyxy.cpu().numpy()
+        confs = result.boxes.conf.cpu().numpy()
         
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(frame, det["label"], (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        for box, conf in zip(boxes, confs):
+            if conf < 0.25:
+                continue
+            
+            x1, y1, x2, y2 = map(int, box)
+            
+            # Step 2: Crop face with padding
+            pad = 20
+            x1p = max(0, x1 - pad)
+            y1p = max(0, y1 - pad)
+            x2p = min(w, x2 + pad)
+            y2p = min(h, y2 + pad)
+            
+            face_crop = frame[y1p:y2p, x1p:x2p]
+            
+            if face_crop.size == 0:
+                continue
+            
+            # Step 3: Resize and classify gender using gender-cls.pt
+            face_crop_resized = cv2.resize(face_crop, (416, 416))
+            gender_results = gender_model(face_crop_resized, verbose=False)
+            
+            # Extract gender prediction
+            if len(gender_results[0].boxes) == 0:
+                gender_label = "Unknown"
+                gender_conf = 0.0
+            else:
+                cls = int(gender_results[0].boxes.cls[0])
+                gender_conf = float(gender_results[0].boxes.conf[0])
+                gender_label = "Male" if cls == 1 else "Female"
+            
+            # Count by gender
+            if gender_label == "Male":
+                male_count += 1
+            elif gender_label == "Female":
+                female_count += 1
+            
+            detections.append({
+                "x": x1,
+                "y": y1,
+                "width": x2 - x1,
+                "height": y2 - y1,
+                "confidence": float(conf),
+                "gender": gender_label.lower(),
+                "label": f"{gender_label} ({gender_conf:.2f})"
+            })
     
-    # Update tracking and counts
-    for (object_id, centroid) in objects.items():
-        current_x = centroid[0]
-        gender = tracked_genders[object_id]
-        color = (0, 0, 255) if gender == 1 else (255, 0, 0)
-        
-        cv2.putText(frame, f"ID {object_id}", (centroid[0] - 30, centroid[1] - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        cv2.circle(frame, centroid, 4, color, -1)
-        
-        # Count logic
-        if object_id in previous_x:
-            prev_x = previous_x[object_id]
-            now = time.time()
-            if now - crossed_recently.get(object_id, 0) > 1.5:
-                gender_label = "male" if gender == 1 else "female"
-                
-                if prev_x > line_position and current_x < line_position:
-                    counts[f"{gender_label}_out"] += 1
-                    crossed_recently[object_id] = now
-                elif prev_x < line_position and current_x > line_position:
-                    counts[f"{gender_label}_in"] += 1
-                    crossed_recently[object_id] = now
-        
-        previous_x[object_id] = current_x
+    total_people = male_count + female_count
     
-    # Clean previous_x
-    for oid in list(previous_x.keys()):
-        if oid not in objects:
-            previous_x.pop(oid, None)
-            crossed_recently.pop(oid, None)
-    
-    # Update current count
-    counts["current_count"] = len(objects)
-    
-    # Draw line
-    cv2.line(frame, (line_position, 0), (line_position, frame.shape[0]), (0, 255, 0), 2)
-    
-    # Draw stats
-    cv2.putText(frame, f"Male In: {counts['male_in']}  Out: {counts['male_out']}",
-                (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-    cv2.putText(frame, f"Female In: {counts['female_in']}  Out: {counts['female_out']}",
-                (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-    
-    # FPS
-    curr_time = time.time()
-    fps = 1 / (curr_time - prev_time) if curr_time - prev_time > 0 else 0
-    prev_time = curr_time
-    cv2.putText(frame, f"FPS: {fps:.2f}", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-    
-    return frame
+    return {
+        "status": "success",
+        "total_people": total_people,
+        "male_count": male_count,
+        "female_count": female_count,
+        "detections": detections
+    }
 
 # ========================
 # API Endpoints
 # ========================
 
-@app.post("/api/process-video")
-async def process_video(file: UploadFile = File(...)):
-    """Process uploaded video file"""
-    global counts
-    counts = {"male_in": 0, "male_out": 0, "female_in": 0, "female_out": 0, "current_count": 0}
-    
-    contents = await file.read()
-    nparr = np.frombuffer(contents, np.uint8)
-    
-    temp_file = "temp_video.mp4"
-    with open(temp_file, "wb") as f:
-        f.write(contents)
-    
-    cap = cv2.VideoCapture(temp_file)
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = int(cap.get(cv2.CAP_PROP_FPS))
-    
-    out = cv2.VideoWriter("output_video.mp4", cv2.VideoWriter_fourcc(*'mp4v'), fps, (frame_width, frame_height))
-    
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+@app.post("/api/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    """Upload and analyze image using 2-step detection (face-model.pt + gender-cls.pt)"""
+    try:
+        contents = await file.read()
+        nparr = np.frombuffer(contents, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        frame = process_frame(frame)
-        out.write(frame)
+        if frame is None:
+            return JSONResponse({
+                "status": "error",
+                "message": "Failed to decode image"
+            }, status_code=400)
+        
+        # Analyze image with 2-step process
+        result = analyze_image(frame)
+        
+        return JSONResponse(result)
     
-    cap.release()
-    out.release()
-    
-    return JSONResponse({"status": "success", "counts": counts, "output_file": "output_video.mp4"})
+    except Exception as e:
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        }, status_code=500)
 
 @app.get("/api/stats")
 async def get_stats():
-    """Get current statistics"""
+    """Get current statistics for live analytics"""
     return JSONResponse(counts)
 
-@app.get("/api/stream")
-async def stream_stats():
-    """Stream statistics via Server-Sent Events"""
-    async def event_generator():
-        while True:
-            yield f"data: {json.dumps(counts)}\n\n"
-            await asyncio.sleep(0.5)
-    
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+@app.post("/api/reset-counts")
+async def reset_counts():
+    """Reset all counts for live analytics"""
+    global counts, ct, previous_x, crossed_recently
+    counts = {
+        "male_in": 0,
+        "male_out": 0,
+        "female_in": 0,
+        "female_out": 0,
+        "current_count": 0,
+        "current_male": 0,
+        "current_female": 0,
+    }
+    ct = CentroidTracker()
+    previous_x = {}
+    crossed_recently = {}
+    return JSONResponse({"status": "success", "message": "Counts reset"})
 
 @app.get("/api/health")
 async def health():
     """Health check"""
-    return JSONResponse({"status": "ok", "models_loaded": True})
+    return JSONResponse({
+        "status": "ok",
+        "models": {
+            "gender_model": gender_model is not None,
+            "face_model": face_model is not None
+        }
+    })
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket for live analytics (using gender-cls.pt only for speed)"""
     await websocket.accept()
     try:
         while True:
             data = await websocket.receive_text()
             if data.startswith("data:image/jpeg;base64,"):
-                # Decode base64 image
                 image_data = base64.b64decode(data.split(",")[1])
                 nparr = np.frombuffer(image_data, np.uint8)
                 frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-                # Process frame
-                detections, stats, fps = get_detections_and_stats(frame)
+                if frame is not None:
+                    detections, stats, fps = get_detections_and_stats(frame)
 
-                # Send back detections and stats
-                await websocket.send_json({
-                    "detections": detections,
-                    "stats": stats,
-                    "fps": fps
-                })
+                    await websocket.send_json({
+                        "detections": detections,
+                        "stats": stats,
+                        "fps": fps
+                    })
     except Exception as e:
         print(f"WebSocket error: {e}")
     finally:
