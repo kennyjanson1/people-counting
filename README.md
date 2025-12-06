@@ -2,45 +2,63 @@
 
 A real-time people counting and analytics system using computer vision, capable of detecting people, classifying gender, and tracking movement across a virtual line. Supports both live webcam input and video file uploads with comprehensive statistics.
 
+## 🌐 Live Deployments
+
+- **Frontend**: [Deployed on Vercel](https://your-vercel-deployment-link.vercel.app)
+- **Backend API**: [Deployed on Hugging Face Spaces](https://your-huggingface-space.hf.space)
+
 ## 🚀 Features
 
 - **Real-time Person Detection**: Uses YOLOv8 for accurate person detection
 - **Gender Classification**: Distinguishes between male and female individuals
-- **Object Tracking**: Centroid-based tracking for consistent identification
-- **Directional Counting**: Tracks entry/exit movements across a configurable line
 - **Live Analytics Dashboard**: Real-time statistics with gender breakdown
-- **Dual Input Support**: Webcam streaming via WebSocket and video file uploads
-- **Modern Web Interface**: Built with Next.js and Tailwind CSS
-- **RESTful API**: FastAPI backend with comprehensive endpoints
+- **Photo Upload Analysis**: Process single images for instant people counting
 
 ## 🏗️ Project Structure
 
 ```
 people-counting/
 ├── backend/                          # FastAPI Backend
-│   ├── app.py                       # Main FastAPI application
+│   ├── app_deployment.py            # Production deployment version
+│   ├── app_local.py                # Local development version
 │   ├── requirements.txt             # Python dependencies
 │   ├── gender-cls.pt               # Gender classification model
-│   ├── yolov8n.pt                  # YOLOv8 person detection model
-│   └── train.py                    # Model training script
+│   ├── face-model.pt               # Face detection model
+│   ├── train-1.py                  # Model training scripts
+│   └── train-2.py
 ├── frontend/                        # Next.js Frontend
-│   ├── app/                        # Next.js 13+ app directory
-│   │   ├── api/                    # API routes
+│   ├── app/                        # Next.js 16+ app directory
+│   │   ├── api/                    # API routes (proxy to backend)
+│   │   │   ├── health/             # Health check
+│   │   │   ├── process-video/      # Video processing
+│   │   │   ├── stats/              # Statistics
+│   │   │   ├── stream/             # Stream endpoint
+│   │   │   └── video/process/      # Video processing
 │   │   ├── globals.css             # Global styles
 │   │   ├── layout.tsx              # Root layout
 │   │   └── page.tsx                # Home page
 │   ├── components/                 # React components
 │   │   ├── ui/                     # Reusable UI components
-│   │   ├── live-analytics.tsx      # Main analytics component
+│   │   ├── live-analytics.tsx      # Real-time analytics
 │   │   ├── stats-dashboard.tsx     # Statistics display
 │   │   ├── video-renderer.tsx      # Video display with overlays
-│   │   └── video-input-selector.tsx # Input method selector
+│   │   ├── video-input-selector.tsx # Input method selector
+│   │   ├── image-upload.tsx        # Photo upload component
+│   │   ├── theme-provider.tsx      # Theme provider
+│   │   └── theme-toggle.tsx        # Dark/light mode toggle
 │   ├── lib/                        # Utility libraries
 │   │   ├── detection-client.ts     # Backend communication client
-│   │   ├── centroid-tracker.ts     # Client-side tracking
+│   │   ├── types.ts                # TypeScript type definitions
+│   │   ├── utils.ts                # Utility functions
 │   │   └── yolo-processor.ts       # YOLO processing utilities
-│   └── public/                     # Static assets
-├── human-walking-ground-truth-main/ # Sample videos for testing
+│   ├── public/                     # Static assets
+│   ├── styles/                     # Additional styles
+│   ├── package.json                # Node.js dependencies
+│   └── tsconfig.json               # TypeScript configuration
+├── People-Counting/                # Alternative backend implementation
+│   ├── app.py                      # Streamlit/Gradio app
+│   ├── requirements.txt            # Dependencies
+│   └── Dockerfile                  # Docker configuration
 └── README.md                       # This file
 ```
 
@@ -52,12 +70,15 @@ people-counting/
 - **Ultralytics YOLO**: State-of-the-art object detection
 - **NumPy**: Numerical computing
 - **WebSocket**: Real-time bidirectional communication
+- **Uvicorn**: ASGI server for deployment
 
 ### Frontend
-- **Next.js 14**: React framework with app directory
+- **Next.js 16**: React framework with app directory
 - **TypeScript**: Type-safe JavaScript
 - **Tailwind CSS**: Utility-first CSS framework
+- **Radix UI**: Accessible component primitives
 - **Lucide React**: Beautiful icons
+- **Vercel Analytics**: Web analytics
 - **WebRTC**: Browser media capture
 
 ## 📋 Prerequisites
@@ -84,6 +105,8 @@ cd backend
 
 # Create virtual environment (recommended)
 python -m venv venv
+
+# Activate virtual environment
 # On Windows:
 venv\Scripts\activate
 # On macOS/Linux:
@@ -91,6 +114,9 @@ source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Download models (if not included)
+# gender-cls.pt and face-model.pt should be in the backend directory
 ```
 
 ### 3. Frontend Setup
@@ -107,16 +133,26 @@ pnpm install
 
 ## ▶️ Running the Application
 
-### Start Backend Server
+### Local Development
+
+#### Start Backend Server
 
 ```bash
 cd backend
-python app.py
+python app_local.py
+```
+
+The backend will start on `http://localhost:7860` (simple counting logic)
+
+Or for full deployment version:
+
+```bash
+python app_deployment.py
 ```
 
 The backend will start on `http://localhost:5000`
 
-### Start Frontend Server
+#### Start Frontend Server
 
 ```bash
 cd frontend
@@ -125,20 +161,35 @@ npm run dev
 
 The frontend will start on `http://localhost:3000`
 
+### Production Deployment
+
+#### Backend (Hugging Face Spaces)
+1. Create a new Hugging Face Space
+2. Upload the backend files
+3. Set the startup command to `python app_deployment.py`
+4. The app will be available at `https://your-space.hf.space`
+
+#### Frontend (Vercel)
+1. Connect your GitHub repository to Vercel
+2. Deploy the frontend directory
+3. Update the backend API URLs in the environment variables
+4. The app will be available at `https://your-project.vercel.app`
+
 ## 📖 Usage
 
-1. **Open the Application**: Navigate to `http://localhost:3000` in your browser
+1. **Open the Application**: Navigate to the deployed frontend URL or `http://localhost:3000` for local development
 
 2. **Choose Input Method**:
    - **Webcam**: Click "Webcam" for real-time processing
-   - **Upload**: Click "Upload" to select a video file
+   - **Upload Video**: Click "Upload" to select a video file
+   - **Upload Photo**: Click "Upload Photo" for instant image analysis
 
 3. **View Analytics**: Watch live detections and statistics update in real-time
 
 4. **Monitor Statistics**:
    - Current people count
    - Gender breakdown (male/female)
-   - Entry/exit counts by gender
+   - Entry/exit counts by gender (for directional counting)
 
 ## 🔌 API Reference
 
@@ -146,13 +197,14 @@ The frontend will start on `http://localhost:3000`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/process-video` | Process uploaded video file |
+| `GET` | `/` | Root endpoint with API info |
+| `POST` | `/api/upload-image` | Process uploaded image for people counting |
 | `GET` | `/api/stats` | Get current statistics |
-| `GET` | `/api/stream` | Server-sent events for stats (legacy) |
+| `POST` | `/api/reset-counts` | Reset all counting statistics |
 | `GET` | `/api/health` | Health check endpoint |
 | `WS` | `/ws` | WebSocket for real-time frame processing |
 
-### Frontend API Routes
+### Frontend API Routes (Proxy)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -160,47 +212,77 @@ The frontend will start on `http://localhost:3000`
 | `POST` | `/api/process-video` | Video processing proxy |
 | `GET` | `/api/stats` | Statistics proxy |
 | `GET` | `/api/stream` | Stream proxy |
-| `GET` | `/api/ws` | WebSocket proxy (placeholder) |
+| `GET` | `/api/video/process` | Video processing proxy |
 
 ## 🎯 How It Works
 
 ### Detection Pipeline
-1. **Input Capture**: Webcam frames or video file frames
-2. **Person Detection**: YOLOv8 identifies people in the frame
-3. **Gender Classification**: Custom model classifies gender for each detection
+1. **Input Capture**: Webcam frames, video files, or single images
+2. **Face/Person Detection**: YOLO models identify faces or full bodies
+3. **Gender Classification**: Custom CNN model classifies gender
 4. **Object Tracking**: Centroid tracker maintains identity across frames
-5. **Counting Logic**: Tracks movement across a virtual line
-6. **Statistics Update**: Real-time metrics calculation
+5. **Counting Logic**: Tracks movement across virtual lines or simple presence counting
+6. **Statistics Update**: Real-time metrics calculation and display
 
 ### Real-time Processing
 - **Webcam**: Frames captured via `getUserMedia`, sent to backend via WebSocket
 - **Video Files**: Processed frame-by-frame on upload
+- **Photo Upload**: Single image analysis for instant results
 - **Tracking**: Maintains object identity using centroid distances
-- **Counting**: Direction-based counting with cooldown to prevent double-counting
+- **Counting**: Direction-based counting with cooldown prevention
+
+### Counting Modes
+- **Directional Counting** (`app_deployment.py`): Tracks in/out movements
+- **Simple Counting** (`app_local.py`): Current presence counting
 
 ## 🧪 Testing
 
-Sample videos are included in `human-walking-ground-truth-main/` for testing:
+Sample videos can be used for testing the video upload feature:
 
 ```bash
-# Use any of the walk*.MP4 files for testing
+# Place test videos in the project root or upload via the interface
+# The system works with standard MP4/MOV video formats
 ```
 
 ## 🔧 Configuration
 
 ### Backend Configuration
-- **Detection Confidence**: Configurable in `app.py` (default: 0.4)
+- **Detection Confidence**: Configurable in app files (default: 0.3-0.4)
 - **Tracking Parameters**: Max disappearance frames in `CentroidTracker`
-- **Line Position**: Automatically set to frame center
+- **Line Position**: Automatically set to frame center for directional counting
+- **Model Paths**: Update paths for gender-cls.pt and face-model.pt
 
 ### Frontend Configuration
-- **Video Resolution**: Ideal 1280x720 for webcam
+- **Video Resolution**: Ideal 1280x720 for webcam input
 - **Frame Rate**: Browser-dependent, typically 30 FPS
-- **WebSocket URL**: Configurable in `detection-client.ts`
+- **Backend URL**: Configure API endpoints in `detection-client.ts`
+- **WebSocket URL**: Update for real-time processing
+
+### Environment Variables
+Create `.env.local` in frontend directory:
+```
+NEXT_PUBLIC_BACKEND_URL=https://your-huggingface-space.hf.space
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
+## ⚠️ Notes
 
-**Note**: This system requires significant computational resources for real-time processing. Performance may vary based on hardware capabilities.
+- This system requires significant computational resources for real-time processing
+- Performance may vary based on hardware capabilities and model sizes
+- For production deployment, consider using GPU instances for better performance
+- Model files (gender-cls.pt, face-model.pt) need to be downloaded separately if not included
+
+## 📞 Support
+
+For questions or issues, please open an issue on the GitHub repository.
