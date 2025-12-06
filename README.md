@@ -209,7 +209,7 @@ Create `.env.local` in frontend directory:
 NEXT_PUBLIC_BACKEND_URL=https://your-huggingface-space.hf.space
 ```
 
-## 📄 License
+## 👨‍💻 Author
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-- Kenny Janson
+Developed by Kenny Janson
+Project: People Counting
