@@ -1,6 +1,6 @@
 # People Counting System
 
-A real-time people counting and analytics system using computer vision, capable of detecting people, classifying gender, and tracking movement across a virtual line. Supports both live webcam input and video file uploads with comprehensive statistics.
+A real-time people counting and analytics system using computer vision, capable of detecting people and classifying gender in a single frame. Supports live webcam input and photo uploads with comprehensive statistics.
 
 ## 🌐 Live Deployments
 
@@ -187,30 +187,19 @@ The frontend will start on `http://localhost:3000`
 ## 🎯 How It Works
 
 ### Detection Pipeline
-1. **Input Capture**: Webcam frames, video files, or single images
-2. **Face/Person Detection**: YOLO models identify faces or full bodies
-3. **Gender Classification**: Custom CNN model classifies gender
-4. **Object Tracking**: Centroid tracker maintains identity across frames
-5. **Counting Logic**: Simple presence counting
-6. **Statistics Update**: Real-time metrics calculation and display
+1. **Input Capture**: Webcam frames or single images
+2. **Face/Person Detection**: YOLO models identify all persons present in the frame
+3. **Gender Classification**: Custom CNN model classifies gender of each detected person
+4. **Counting Logic**: Counts the total number of people detected per frame (no tracking or movement analysis)
+5. **Statistics Update**: Displays real-time count and gender distribution
 
 ### Real-time Processing
 - **Webcam**: Frames captured via `getUserMedia`, sent to backend via WebSocket
 - **Photo Upload**: Single image analysis for instant results
-- **Tracking**: Maintains object identity using centroid distances
-- **Counting**: Direction-based counting with cooldown prevention
+- **Counting**: Simple per-frame counting without tracking or directional logic
 
 ### Counting Modes
 - **Simple Counting** (`app_local.py` and `app_deployment.py`): Current presence counting
-
-## 🧪 Testing
-
-Sample videos can be used for testing the video upload feature:
-
-```bash
-# Place test videos in the project root or upload via the interface
-# The system works with standard MP4/MOV video formats
-```
 
 ## 🔧 Configuration
 
