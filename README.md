@@ -76,13 +76,6 @@ people-counting/
 - **TypeScript**: Type-safe JavaScript
 - **Tailwind CSS**: Utility-first CSS framework
 
-## 📋 Prerequisites
-
-- **Python 3.8+**: For backend processing
-- **Node.js 18+**: For frontend development
-- **Webcam**: For real-time video input (optional for file uploads)
-- **Git**: For cloning the repository
-
 ## 🚀 Installation & Setup
 
 ### 1. Clone the Repository
