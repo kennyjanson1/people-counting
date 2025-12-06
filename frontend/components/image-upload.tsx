@@ -29,6 +29,36 @@ interface AnalysisResult {
   detections: Detection[]
 }
 
+// Helper function to get API base URL
+const getApiBaseUrl = (): string => {
+  // Priority 1: Environment variable
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL
+  }
+
+  // Priority 2: Detect environment
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname
+    const protocol = window.location.protocol
+    
+    // If on Hugging Face Space
+    if (hostname.includes('hf.space')) {
+      return `${protocol}//${hostname}`
+    }
+    
+    // If on production
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      return `${protocol}//${hostname}`
+    }
+    
+    // Local development
+    return 'http://localhost:7860'
+  }
+
+  // Fallback
+  return 'http://localhost:7860'
+}
+
 export default function ImageUpload({ onBack }: ImageUploadProps) {
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -38,8 +68,6 @@ export default function ImageUpload({ onBack }: ImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
-  const [zoom, setZoom] = useState(1);
-
 
   // Auto-analyze when image is selected
   useEffect(() => {
@@ -124,28 +152,36 @@ export default function ImageUpload({ onBack }: ImageUploadProps) {
       const formData = new FormData()
       formData.append("file", imageFile)
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://knnyjnson-people-counting.hf.space"
-      const response = await fetch(`${apiUrl}/api/upload-image`, {
+      const baseUrl = getApiBaseUrl()
+      const apiUrl = `${baseUrl}/api/upload-image`
+      
+      console.log(`[API] Uploading to: ${apiUrl}`)
+
+      const response = await fetch(apiUrl, {
         method: "POST",
         body: formData,
       })
 
       if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`)
+        const errorText = await response.text()
+        console.error(`[API] Error response:`, errorText)
+        throw new Error(`Upload failed: ${response.status} ${response.statusText}`)
       }
 
       const data: AnalysisResult = await response.json()
+      console.log(`[API] Analysis result:`, data)
 
       if (data.status === "success") {
         setAnalysisResult(data)
         // Draw detections after a short delay to ensure image is loaded
         setTimeout(() => drawDetections(data.detections), 100)
       } else {
-        setError("Analysis failed. Please try again.")
+        setError(data.message || "Analysis failed. Please try again.")
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to analyze image")
-      console.error("Analysis error:", err)
+      const errorMessage = err instanceof Error ? err.message : "Failed to analyze image"
+      setError(errorMessage)
+      console.error("[API] Analysis error:", err)
     } finally {
       setIsAnalyzing(false)
     }
@@ -241,7 +277,10 @@ export default function ImageUpload({ onBack }: ImageUploadProps) {
         {error && (
           <Card className="mb-4 border-destructive bg-destructive/10 flex-shrink-0">
             <CardContent className="pt-6">
-              <p className="text-destructive text-sm">{error}</p>
+              <p className="text-destructive text-sm font-medium">{error}</p>
+              <p className="text-destructive/70 text-xs mt-1">
+                Check console for details or try again
+              </p>
               <Button variant="ghost" size="sm" onClick={() => setError(null)} className="mt-2">
                 Dismiss
               </Button>
