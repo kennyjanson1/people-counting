@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
     // TODO: Send to Python backend running on localhost:5000
     // Example: POST request to your Flask/FastAPI app with the video
-    const pythonBackendUrl = process.env.PYTHON_BACKEND_URL || "http://localhost:5000"
+    const pythonBackendUrl = process.env.PYTHON_BACKEND_URL || "https://knnyjnson-people-counting.hf.space"
 
     const response = await fetch(`${pythonBackendUrl}/api/detect`, {
       method: "POST",

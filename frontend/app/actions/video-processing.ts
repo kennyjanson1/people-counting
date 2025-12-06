@@ -11,13 +11,16 @@ interface ProcessingResult {
   error?: string
 }
 
+// Ambil backend URL dari environment variable, fallback ke huggingface space URL
+const backendUrl = process.env.PYTHON_BACKEND_URL || "https://knnyjnson-people-counting.hf.space"
+
 /**
  * Process video file dengan backend Python
  * Bisa digunakan sebagai server action dari client components
  */
 export async function processVideoFile(formData: FormData): Promise<ProcessingResult> {
   try {
-    const response = await fetch("http://localhost:3000/api/video/process", {
+    const response = await fetch(`${backendUrl}/api/video/process`, {
       method: "POST",
       body: formData,
     })
@@ -45,11 +48,10 @@ export async function processVideoFile(formData: FormData): Promise<ProcessingRe
  */
 export async function validateBackendConnection(): Promise<boolean> {
   try {
-    const backendUrl = process.env.PYTHON_BACKEND_URL || "http://localhost:5000"
-
     const response = await fetch(`${backendUrl}/health`, {
       method: "GET",
-      timeout: 5000,
+      // Note: fetch API di Node.js atau Next.js tidak support timeout secara native,
+      // bisa gunakan AbortController jika perlu timeout lebih advanced
     })
 
     return response.ok

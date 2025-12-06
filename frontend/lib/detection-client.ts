@@ -38,7 +38,7 @@ export class DetectionClient {
     this.detectionListeners.push(onDetections)
     this.listeners.push(onStats)
 
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:5000/ws"
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "https://knnyjnson-people-counting.hf.space"
     console.log(`[WS] Connecting to ${wsUrl}`)
     
     this.ws = new WebSocket(wsUrl)

@@ -124,7 +124,7 @@ export default function ImageUpload({ onBack }: ImageUploadProps) {
       const formData = new FormData()
       formData.append("file", imageFile)
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://knnyjnson-people-counting.hf.space"
       const response = await fetch(`${apiUrl}/api/upload-image`, {
         method: "POST",
         body: formData,

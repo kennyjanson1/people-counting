@@ -1,7 +1,7 @@
 // Server-Sent Events untuk real-time updates
 import { type NextRequest, NextResponse } from "next/server"
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000"
+const BACKEND_URL = process.env.BACKEND_URL || "https://knnyjnson-people-counting.hf.space"
 
 export async function GET(req: NextRequest) {
   const encoder = new TextEncoder()
