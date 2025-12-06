@@ -48,6 +48,12 @@ export default function LiveAnalytics({ inputType, onBack }: LiveAnalyticsProps)
   const [fps, setFps] = useState(0)
   const [linePosition, setLinePosition] = useState<number | undefined>()
 
+  // Log environment for debugging
+  useEffect(() => {
+    console.log('[LiveAnalytics] NEXT_PUBLIC_WS_URL:', process.env.NEXT_PUBLIC_WS_URL)
+    console.log('[LiveAnalytics] NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL)
+  }, [])
+
   useEffect(() => {
     const initializeInput = async () => {
       try {

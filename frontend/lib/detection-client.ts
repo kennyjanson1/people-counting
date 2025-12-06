@@ -31,6 +31,7 @@ export class DetectionClient {
   private getWebSocketUrl(): string {
     // Priority 1: Environment variable
     if (process.env.NEXT_PUBLIC_WS_URL) {
+      console.log('[WS] Using env var:', process.env.NEXT_PUBLIC_WS_URL)
       return process.env.NEXT_PUBLIC_WS_URL
     }
 
@@ -39,22 +40,30 @@ export class DetectionClient {
       const hostname = window.location.hostname
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
       
+      console.log('[WS] Auto-detecting environment:', { hostname, protocol })
+      
       // Production (Hugging Face Space)
       if (hostname.includes('hf.space')) {
-        return `${protocol}//${hostname}/ws`
+        const url = `${protocol}//${hostname}/ws`
+        console.log('[WS] Detected HF Space:', url)
+        return url
       }
       
       // Production (Vercel + custom backend)
       if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-        // Replace with your production backend URL
-        return '"https://knnyjnson-people-counting.hf.space"'
+        const url = 'wss://knnyjnson-people-counting.hf.space/ws'
+        console.log('[WS] Detected production:', url)
+        return url
       }
       
       // Local development - PORT 7860
-      return 'ws://localhost:7860/ws'
+      const url = 'ws://localhost:7860/ws'
+      console.log('[WS] Detected local development:', url)
+      return url
     }
 
     // Fallback
+    console.log('[WS] Using fallback URL')
     return 'ws://localhost:7860/ws'
   }
 
