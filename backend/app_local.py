@@ -4,18 +4,16 @@ from collections import OrderedDict
 from ultralytics import YOLO
 import time
 from fastapi import FastAPI, UploadFile, File, WebSocket
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-import asyncio
 import json
 import base64
-import os
 
 # ========================
-# Centroid Tracker
+# Centroid Tracker (SIMPLIFIED)
 # ========================
 class CentroidTracker:
-    def __init__(self, max_disappeared=80):
+    def __init__(self, max_disappeared=30):  # Lebih cepat hilang
         self.next_object_id = 0
         self.objects = OrderedDict()
         self.disappeared = OrderedDict()
@@ -77,13 +75,18 @@ class CentroidTracker:
         return self.objects, self.genders
 
 # ========================
-# FastAPI Setup
+# FastAPI Setup - LOCAL DEVELOPMENT
 # ========================
-app = FastAPI()
+app = FastAPI(title="People Counting API - Simple Count", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -92,50 +95,38 @@ app.add_middleware(
 # ========================
 # Load YOLO Models
 # ========================
+print("🔄 Loading models for LOCAL development...")
+
 try:
-    # Model untuk Live Analytics (realtime tracking) - LANGSUNG DETEKSI + KLASIFIKASI
     gender_model = YOLO("gender-cls.pt")
-    print("✓ Model gender-cls.pt loaded successfully (for Live Analytics)")
+    print("✓ gender-cls.pt loaded (Live Analytics)")
 except Exception as e:
     print(f"⚠ Error loading gender-cls.pt: {e}")
     gender_model = None
 
 try:
-    # Model untuk Image Upload (face detection only)
     face_model = YOLO("face-model.pt")
-    print("✓ Model face-model.pt loaded successfully (for Image Upload)")
+    print("✓ face-model.pt loaded (Image Upload)")
 except Exception as e:
     print(f"⚠ Error loading face-model.pt: {e}")
     face_model = None
 
+print("✓ Models loaded successfully")
+
 # ========================
-# Global Variables (for Live Analytics)
+# Global Variables (SIMPLIFIED - NO IN/OUT COUNTING)
 # ========================
-counts = {
-    "male_in": 0,
-    "male_out": 0,
-    "female_in": 0,
-    "female_out": 0,
-    "current_count": 0,
-    "current_male": 0,
-    "current_female": 0,
-}
 ct = CentroidTracker()
-previous_x = {}
-crossed_recently = {}
-line_position = None
-frame_width = None
 prev_time = time.time()
 
 # ========================
-# Helper Functions for Live Analytics (PAKAI GENDER-CLS.PT SAJA)
+# Helper Functions for Live Analytics
 # ========================
 def detect_and_classify_live(frame):
-    """Detect and classify gender for live analytics using gender-cls.pt only"""
+    """Detect and classify gender for live analytics"""
     if gender_model is None:
         return [], [], []
     
-    # Langsung pakai gender-cls.pt (deteksi + klasifikasi sekaligus)
     results = gender_model(frame, conf=0.35, verbose=False, imgsz=640)
     
     centroids, genders = [], []
@@ -152,27 +143,31 @@ def detect_and_classify_live(frame):
             
             x1, y1, x2, y2 = map(int, box)
             
-            # Expand bounding box 20%
+            # Calculate width and height FIRST
             width = x2 - x1
             height = y2 - y1
+            
+            # Then expand bounding box
             expand_w = int(width * 0.2)
-            expand_h = int(height * 0.2)
-            
+            expand_h_top = int(height * 0.1)
+            expand_h_bottom = int(height * 0.4)
+
             x1 = max(0, x1 - expand_w)
-            y1 = max(0, y1 - expand_h)
+            y1 = max(0, y1 - expand_h_top)
             x2 = min(frame.shape[1], x2 + expand_w)
-            y2 = min(frame.shape[0], y2 + expand_h)
+            y2 = min(frame.shape[0], y2 + expand_h_bottom)
             
-            gender = int(cls)  # 0=female, 1=male
+            # Recalculate width and height after expansion
+            width = x2 - x1
+            height = y2 - y1
+                        
+            gender = int(cls)
             
             cx = int((x1 + x2) / 2)
             cy = int((y1 + y2) / 2)
 
             centroids.append((cx, cy))
             genders.append(gender)
-
-            width = x2 - x1
-            height = y2 - y1
             
             detections.append({
                 "id": len(detections),
@@ -188,16 +183,13 @@ def detect_and_classify_live(frame):
     return centroids, genders, detections
 
 def get_detections_and_stats(frame):
-    """Get detections and stats for live analytics"""
-    global line_position, frame_width, prev_time
+    """Get detections and stats - SIMPLE COUNT LOGIC"""
+    global prev_time
     
-    if frame_width is None:
-        frame_width = frame.shape[1]
-        line_position = frame_width // 2
-
     centroids, genders, detections = detect_and_classify_live(frame)
     objects, tracked_genders = ct.update(centroids, genders)
     
+    # Update detection IDs with tracked IDs
     updated_detections = []
     for (object_id, centroid) in objects.items():
         gender = tracked_genders[object_id]
@@ -209,47 +201,41 @@ def get_detections_and_stats(frame):
                 updated_detections.append(det)
                 break
     
-    for (object_id, centroid) in objects.items():
-        current_x = centroid[0]
-        gender = tracked_genders[object_id]
+    # SIMPLE COUNTING LOGIC:
+    # - Total = jumlah orang yang terdeteksi SEKARANG
+    # - Kalau tidak ada orang → semua 0
+    # - Kalau ada orang → count by gender
+    
+    if len(objects) == 0:
+        # TIDAK ADA ORANG → RESET SEMUA
+        stats = {
+            "current_count": 0,
+            "current_male": 0,
+            "current_female": 0,
+        }
+    else:
+        # ADA ORANG → COUNT BY GENDER
+        male_count = sum(1 for g in tracked_genders.values() if g == 1)
+        female_count = sum(1 for g in tracked_genders.values() if g == 0)
         
-        if object_id in previous_x:
-            prev_x = previous_x[object_id]
-            now = time.time()
-            if now - crossed_recently.get(object_id, 0) > 1.5:
-                gender_label = "male" if gender == 1 else "female"
-                
-                if prev_x > line_position and current_x < line_position:
-                    counts[f"{gender_label}_out"] += 1
-                    crossed_recently[object_id] = now
-                elif prev_x < line_position and current_x > line_position:
-                    counts[f"{gender_label}_in"] += 1
-                    crossed_recently[object_id] = now
-        
-        previous_x[object_id] = current_x
+        stats = {
+            "current_count": len(objects),
+            "current_male": male_count,
+            "current_female": female_count,
+        }
     
-    for oid in list(previous_x.keys()):
-        if oid not in objects:
-            previous_x.pop(oid, None)
-            crossed_recently.pop(oid, None)
-    
-    counts["current_count"] = len(objects)
-    male_count = sum(1 for g in tracked_genders.values() if g == 1)
-    female_count = sum(1 for g in tracked_genders.values() if g == 0)
-    counts["current_male"] = male_count
-    counts["current_female"] = female_count
-    
+    # Calculate FPS
     curr_time = time.time()
     fps = 1 / (curr_time - prev_time) if prev_time else 0
     prev_time = curr_time
     
-    return updated_detections, counts.copy(), fps
+    return updated_detections, stats, fps
 
 # ========================
-# Helper Functions for Image Upload (2-STEP: FACE DETECTION + GENDER CLASSIFICATION)
+# Helper Functions for Image Upload
 # ========================
 def analyze_image(frame):
-    """Analyze uploaded image using 2-step: face-model.pt + gender-cls.pt"""
+    """Analyze uploaded image using 2-step detection"""
     if face_model is None or gender_model is None:
         return {
             "status": "error",
@@ -262,7 +248,6 @@ def analyze_image(frame):
     
     h, w = frame.shape[:2]
     
-    # Step 1: Detect faces using face-model.pt
     face_results = face_model(frame, conf=0.3, verbose=False, imgsz=640)
     
     male_count = 0
@@ -279,7 +264,6 @@ def analyze_image(frame):
             
             x1, y1, x2, y2 = map(int, box)
             
-            # Step 2: Crop face with padding
             pad = 20
             x1p = max(0, x1 - pad)
             y1p = max(0, y1 - pad)
@@ -291,11 +275,9 @@ def analyze_image(frame):
             if face_crop.size == 0:
                 continue
             
-            # Step 3: Resize and classify gender using gender-cls.pt
             face_crop_resized = cv2.resize(face_crop, (416, 416))
             gender_results = gender_model(face_crop_resized, verbose=False)
             
-            # Extract gender prediction
             if len(gender_results[0].boxes) == 0:
                 gender_label = "Unknown"
                 gender_conf = 0.0
@@ -304,7 +286,6 @@ def analyze_image(frame):
                 gender_conf = float(gender_results[0].boxes.conf[0])
                 gender_label = "Male" if cls == 1 else "Female"
             
-            # Count by gender
             if gender_label == "Male":
                 male_count += 1
             elif gender_label == "Female":
@@ -334,9 +315,26 @@ def analyze_image(frame):
 # API Endpoints
 # ========================
 
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "message": "People Counting API - Simple Count Logic",
+        "version": "2.0.0",
+        "environment": "local",
+        "counting_logic": "simple",
+        "description": "Ada orang = count +1, Tidak ada = reset 0",
+        "endpoints": {
+            "health": "/api/health",
+            "upload": "/api/upload-image",
+            "stats": "/api/stats",
+            "websocket": "/ws"
+        }
+    }
+
 @app.post("/api/upload-image")
 async def upload_image(file: UploadFile = File(...)):
-    """Upload and analyze image using 2-step detection (face-model.pt + gender-cls.pt)"""
+    """Upload and analyze image"""
     try:
         contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
@@ -348,7 +346,6 @@ async def upload_image(file: UploadFile = File(...)):
                 "message": "Failed to decode image"
             }, status_code=400)
         
-        # Analyze image with 2-step process
         result = analyze_image(frame)
         
         return JSONResponse(result)
@@ -361,32 +358,23 @@ async def upload_image(file: UploadFile = File(...)):
 
 @app.get("/api/stats")
 async def get_stats():
-    """Get current statistics for live analytics"""
-    return JSONResponse(counts)
-
-@app.post("/api/reset-counts")
-async def reset_counts():
-    """Reset all counts for live analytics"""
-    global counts, ct, previous_x, crossed_recently
-    counts = {
-        "male_in": 0,
-        "male_out": 0,
-        "female_in": 0,
-        "female_out": 0,
-        "current_count": 0,
-        "current_male": 0,
-        "current_female": 0,
-    }
-    ct = CentroidTracker()
-    previous_x = {}
-    crossed_recently = {}
-    return JSONResponse({"status": "success", "message": "Counts reset"})
+    """Get current statistics (simple count)"""
+    male_count = sum(1 for g in ct.genders.values() if g == 1)
+    female_count = sum(1 for g in ct.genders.values() if g == 0)
+    
+    return JSONResponse({
+        "current_count": len(ct.objects),
+        "current_male": male_count,
+        "current_female": female_count,
+    })
 
 @app.get("/api/health")
 async def health():
     """Health check"""
     return JSONResponse({
         "status": "ok",
+        "environment": "local",
+        "counting_logic": "simple",
         "models": {
             "gender_model": gender_model is not None,
             "face_model": face_model is not None
@@ -395,9 +383,17 @@ async def health():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket for live analytics (using gender-cls.pt only for speed)"""
+    """WebSocket for live analytics (simple count logic)"""
     await websocket.accept()
+    print("✓ WebSocket client connected")
+    
     try:
+        # Send initial connection confirmation
+        await websocket.send_json({
+            "type": "connected", 
+            "message": "WebSocket ready - Simple count mode"
+        })
+        
         while True:
             data = await websocket.receive_text()
             if data.startswith("data:image/jpeg;base64,"):
@@ -414,10 +410,11 @@ async def websocket_endpoint(websocket: WebSocket):
                         "fps": fps
                     })
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        print(f"⚠ WebSocket error: {e}")
     finally:
+        print("✗ WebSocket client disconnected")
         await websocket.close()
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    uvicorn.run(app, host="0.0.0.0", port=7860)
