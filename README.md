@@ -212,4 +212,4 @@ NEXT_PUBLIC_BACKEND_URL=https://your-huggingface-space.hf.space
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-Kenny Janson
+- Kenny Janson
