@@ -211,5 +211,5 @@ NEXT_PUBLIC_BACKEND_URL=https://your-huggingface-space.hf.space
 
 ## 👨‍💻 Author
 
-Developed by Kenny Janson
-Project: People Counting
+- Developed by Kenny Janson
+- Project: People Counting
