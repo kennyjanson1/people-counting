@@ -183,7 +183,6 @@ The frontend will start on `http://localhost:3000`
 4. **Monitor Statistics**:
    - Current people count
    - Gender breakdown (male/female)
-   - Entry/exit counts by gender (for directional counting)
 
 ## 🎯 How It Works
 
@@ -197,7 +196,6 @@ The frontend will start on `http://localhost:3000`
 
 ### Real-time Processing
 - **Webcam**: Frames captured via `getUserMedia`, sent to backend via WebSocket
-- **Video Files**: Processed frame-by-frame on upload
 - **Photo Upload**: Single image analysis for instant results
 - **Tracking**: Maintains object identity using centroid distances
 - **Counting**: Direction-based counting with cooldown prevention
