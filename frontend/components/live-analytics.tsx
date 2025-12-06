@@ -84,12 +84,32 @@ export default function LiveAnalytics({ inputType, onBack }: LiveAnalyticsProps)
             const canvas = document.createElement('canvas')
             const ctx = canvas.getContext('2d')
             let lastFrameTime = 0
-            // Configurable target FPS (increase to 30 to try for higher framerate)
+            // Configurable target FPS
             const targetFps = 20
             const frameInterval = 1000 / targetFps
-            // Max width to send to backend to reduce payload (maintains aspect ratio)
+            // Max width to send to backend to reduce payload
             const maxSendWidth = 640
             let animationFrameId: number | null = null
+            
+            // Wait for WebSocket connection before sending frames
+            const waitForConnection = () => {
+              return new Promise<void>((resolve) => {
+                const checkConnection = setInterval(() => {
+                  if (detectionClient.isConnected()) {
+                    clearInterval(checkConnection)
+                    console.log('[Frame Sender] ✓ WebSocket ready, starting frame capture')
+                    resolve()
+                  }
+                }, 100) // Check every 100ms
+                
+                // Timeout after 10 seconds
+                setTimeout(() => {
+                  clearInterval(checkConnection)
+                  console.warn('[Frame Sender] ⚠️ WebSocket connection timeout, starting anyway')
+                  resolve()
+                }, 10000)
+              })
+            }
             
             const sendFrame = () => {
               const now = Date.now()
@@ -115,8 +135,9 @@ export default function LiveAnalytics({ inputType, onBack }: LiveAnalyticsProps)
               animationFrameId = requestAnimationFrame(sendFrame)
             }
             
-            videoRef.current.onloadedmetadata = () => {
-              console.log("Video metadata loaded, starting frame capture")
+            videoRef.current.onloadedmetadata = async () => {
+              console.log("[Video] Metadata loaded, waiting for WebSocket connection...")
+              await waitForConnection()
               sendFrame()
             }
             

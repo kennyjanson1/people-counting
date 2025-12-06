@@ -31,32 +31,37 @@ interface AnalysisResult {
 
 // Helper function to get API base URL
 const getApiBaseUrl = (): string => {
+  let baseUrl = ''
+  
   // Priority 1: Environment variable
   if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL
+    baseUrl = process.env.NEXT_PUBLIC_API_URL
   }
-
   // Priority 2: Detect environment
-  if (typeof window !== 'undefined') {
+  else if (typeof window !== 'undefined') {
     const hostname = window.location.hostname
     const protocol = window.location.protocol
     
     // If on Hugging Face Space
     if (hostname.includes('hf.space')) {
-      return `${protocol}//${hostname}`
+      baseUrl = `${protocol}//${hostname}`
     }
-    
     // If on production
-    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-      return `${protocol}//${hostname}`
+    else if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      baseUrl = `${protocol}//${hostname}`
     }
-    
     // Local development
-    return 'http://localhost:7860'
+    else {
+      baseUrl = 'http://localhost:7860'
+    }
   }
-
   // Fallback
-  return 'http://localhost:7860'
+  else {
+    baseUrl = 'http://localhost:7860'
+  }
+  
+  // Remove trailing slash to prevent double slashes
+  return baseUrl.replace(/\/+$/, '')
 }
 
 export default function ImageUpload({ onBack }: ImageUploadProps) {
