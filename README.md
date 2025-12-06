@@ -4,8 +4,8 @@ A real-time people counting and analytics system using computer vision, capable 
 
 ## 🌐 Live Deployments
 
-- **Frontend**: [Deployed on Vercel](https://your-vercel-deployment-link.vercel.app)
-- **Backend API**: [Deployed on Hugging Face Spaces](https://your-huggingface-space.hf.space)
+- **Frontend**: [Deployed on Vercel](https://people-counting-fl7t.vercel.app/)
+- **Backend API**: [Deployed on Hugging Face Spaces](https://huggingface.co/spaces/Knnyjnson/People-Counting)
 
 ## 🚀 Features
 
@@ -68,7 +68,6 @@ people-counting/
 - **FastAPI**: High-performance async web framework
 - **OpenCV**: Computer vision library
 - **Ultralytics YOLO**: State-of-the-art object detection
-- **NumPy**: Numerical computing
 - **WebSocket**: Real-time bidirectional communication
 - **Uvicorn**: ASGI server for deployment
 
@@ -76,10 +75,6 @@ people-counting/
 - **Next.js 16**: React framework with app directory
 - **TypeScript**: Type-safe JavaScript
 - **Tailwind CSS**: Utility-first CSS framework
-- **Radix UI**: Accessible component primitives
-- **Lucide React**: Beautiful icons
-- **Vercel Analytics**: Web analytics
-- **WebRTC**: Browser media capture
 
 ## 📋 Prerequisites
 
@@ -181,7 +176,6 @@ The frontend will start on `http://localhost:3000`
 
 2. **Choose Input Method**:
    - **Webcam**: Click "Webcam" for real-time processing
-   - **Upload Video**: Click "Upload" to select a video file
    - **Upload Photo**: Click "Upload Photo" for instant image analysis
 
 3. **View Analytics**: Watch live detections and statistics update in real-time
@@ -191,29 +185,6 @@ The frontend will start on `http://localhost:3000`
    - Gender breakdown (male/female)
    - Entry/exit counts by gender (for directional counting)
 
-## 🔌 API Reference
-
-### Backend Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/` | Root endpoint with API info |
-| `POST` | `/api/upload-image` | Process uploaded image for people counting |
-| `GET` | `/api/stats` | Get current statistics |
-| `POST` | `/api/reset-counts` | Reset all counting statistics |
-| `GET` | `/api/health` | Health check endpoint |
-| `WS` | `/ws` | WebSocket for real-time frame processing |
-
-### Frontend API Routes (Proxy)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/health` | Backend health check proxy |
-| `POST` | `/api/process-video` | Video processing proxy |
-| `GET` | `/api/stats` | Statistics proxy |
-| `GET` | `/api/stream` | Stream proxy |
-| `GET` | `/api/video/process` | Video processing proxy |
-
 ## 🎯 How It Works
 
 ### Detection Pipeline
@@ -221,7 +192,7 @@ The frontend will start on `http://localhost:3000`
 2. **Face/Person Detection**: YOLO models identify faces or full bodies
 3. **Gender Classification**: Custom CNN model classifies gender
 4. **Object Tracking**: Centroid tracker maintains identity across frames
-5. **Counting Logic**: Tracks movement across virtual lines or simple presence counting
+5. **Counting Logic**: Simple presence counting
 6. **Statistics Update**: Real-time metrics calculation and display
 
 ### Real-time Processing
@@ -232,8 +203,7 @@ The frontend will start on `http://localhost:3000`
 - **Counting**: Direction-based counting with cooldown prevention
 
 ### Counting Modes
-- **Directional Counting** (`app_deployment.py`): Tracks in/out movements
-- **Simple Counting** (`app_local.py`): Current presence counting
+- **Simple Counting** (`app_local.py` and `app_deployment.py`): Current presence counting
 
 ## 🧪 Testing
 
@@ -246,43 +216,13 @@ Sample videos can be used for testing the video upload feature:
 
 ## 🔧 Configuration
 
-### Backend Configuration
-- **Detection Confidence**: Configurable in app files (default: 0.3-0.4)
-- **Tracking Parameters**: Max disappearance frames in `CentroidTracker`
-- **Line Position**: Automatically set to frame center for directional counting
-- **Model Paths**: Update paths for gender-cls.pt and face-model.pt
-
-### Frontend Configuration
-- **Video Resolution**: Ideal 1280x720 for webcam input
-- **Frame Rate**: Browser-dependent, typically 30 FPS
-- **Backend URL**: Configure API endpoints in `detection-client.ts`
-- **WebSocket URL**: Update for real-time processing
-
 ### Environment Variables
 Create `.env.local` in frontend directory:
 ```
 NEXT_PUBLIC_BACKEND_URL=https://your-huggingface-space.hf.space
 ```
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## ⚠️ Notes
-
-- This system requires significant computational resources for real-time processing
-- Performance may vary based on hardware capabilities and model sizes
-- For production deployment, consider using GPU instances for better performance
-- Model files (gender-cls.pt, face-model.pt) need to be downloaded separately if not included
-
-## 📞 Support
-
-For questions or issues, please open an issue on the GitHub repository.
+Kenny Janson
